@@ -161,6 +161,9 @@ def create_segments(
 
         # 一文ごとに切り出した音声ファイル（ファイル名には書き起こし文が入る）を出力する
         count = 1
+        tmp = transcribe_result.segments[0].start
+        tmp_transcript = ''
+
         for index, segment in enumerate(transcribe_result.segments):
             typer.echo('-' * utils.GetTerminalColumnSize())
 
@@ -174,15 +177,33 @@ def create_segments(
                 typer.echo(f'Transcript skipped. (Transcript is in SKIP_TRANSCRIPTS)')
                 continue
 
+            #############
             # (句読点含めて) 書き起こし結果が4文字未満だった場合、データセットにするには短すぎるためスキップする
-            ## 例: そう。/ まじ？ / あ。
-            if len(transcript) < 4:
-                typer.echo(f'Transcript skipped. (Transcript length < 4 characters)')
-                continue
-
             # セグメントの開始時間と終了時間を取得
+            # if len(transcript) < 4:
+            #     typer.echo(f'Transcript skipped. (Transcript length < 4 characters)')
+            #     continue
+
             segment_start = segment.start
             segment_end = segment.end
+
+            if tmp == 1000000:
+                tmp = segment_start
+
+            if segment_end - tmp <= 5:
+                tmp = min(tmp, segment_start)
+                tmp_transcript += transcript
+                continue
+
+            segment_start = tmp
+            tmp_transcript += transcript
+            transcript = tmp_transcript
+
+            typer.echo(f'range: {segment_end - segment_start}')
+            typer.echo(f'transcript: {transcript}')
+            
+            tmp = 1000000
+            tmp_transcript = ''
 
             # もし現在処理中のセグメントの最初の単語の長さが 0.425 秒以上だった場合、先頭 0.25 秒を削る
             ## 前のセグメントの最後の発音の母音が含まれてしまう問題の回避策
@@ -228,6 +249,61 @@ def create_segments(
             if segment_end - segment_start < 1:
                 typer.echo(f'Transcript skipped. (Duration < 1 sec)')
                 continue
+            
+            # # (句読点含めて) 書き起こし結果が4文字未満だった場合、データセットにするには短すぎるためスキップする
+            # ## 例: そう。/ まじ？ / あ。
+            # if len(transcript) < 4:
+            #     typer.echo(f'Transcript skipped. (Transcript length < 4 characters)')
+            #     continue
+
+            # # セグメントの開始時間と終了時間を取得
+            # segment_start = segment.start
+            # segment_end = segment.end
+
+            # # もし現在処理中のセグメントの最初の単語の長さが 0.425 秒以上だった場合、先頭 0.25 秒を削る
+            # ## 前のセグメントの最後の発音の母音が含まれてしまう問題の回避策
+            # ## 日本語の場合単語は基本1文字か2文字になるため、発声時間は 0.425 秒以下になることが多いのを利用している
+            # if segment.words[0].duration >= 0.425:
+            #     segment_start += 0.25
+
+            #     # さらに、もし現在処理中のセグメントの最初の単語の長さが 1 秒以上だった場合、
+            #     # その長さ - 1 秒をさらに削る (最低でも 0.75 秒は残す)
+            #     ## 例: 3.6 秒ある単語なら、先頭 0.25 秒 + 2.6 秒 = 先頭 2.85 秒を削り、残りの 0.75 秒を出力する
+            #     ## 1単語の発声に 1 秒以上掛かることはほぼあり得ないため、無音区間が含まれていると判断する
+            #     if segment.words[0].duration >= 1.0:
+            #         segment_start += segment.words[0].duration - 1.0
+
+            # # もし次のセグメントの最初の単語の長さが 0.425 秒以上だった場合、末尾 0.25 秒を伸ばす
+            # ## 最後の発音の母音が切れてしまう問題の回避策
+            # if index + 1 < len(transcribe_result.segments) and transcribe_result.segments[index + 1].words[0].duration >= 0.425:
+            #     segment_end += 0.25
+
+            #     # さらに、もし次のセグメントの最初の単語の長さが 1 秒以上だった場合、
+            #     # その長さ - 1 秒をさらに伸ばす (最大で 1.0 秒まで伸ばす)
+            #     if transcribe_result.segments[index + 1].words[0].duration >= 1.0:
+            #         segment_end += min(transcribe_result.segments[index + 1].words[0].duration - 1.0, 1.0)
+
+            # # もし次のセグメントの開始位置が現在処理中のセグメントの終了位置よりも後なら、
+            # # 現在処理中のセグメントの終了位置を次のセグメントの開始位置に合わせて末尾が欠けないようにする (最大で 3.0 秒まで伸ばす)
+            # if index + 1 < len(transcribe_result.segments) and segment_end < transcribe_result.segments[index + 1].start:
+            #     segment_end = min(transcribe_result.segments[index + 1].start, segment_end + 3.0)
+
+            # # もし現在処理中のセグメントが音声認識結果の最後のセグメントなら、
+            # # 現在処理中のセグメントの終了位置を音声の長さに合わせて末尾が欠けないようにする
+            # if index + 1 == len(transcribe_result.segments):
+            #     segment_end = prepare.GetAudioFileDuration(voices_file)
+
+            # typer.echo(f'Segment Range: {utils.SecondToTimeCode(segment_start)} - {utils.SecondToTimeCode(segment_end)}')
+
+            # # 開始時刻と終了時刻が同じだった場合、タイムスタンプが正しく取得できていないためスキップする
+            # if segment_start == segment_end:
+            #     typer.echo(f'Transcript skipped. (Start time == End time)')
+            #     continue
+
+            #  # 出力する音声ファイルの長さが1秒未満になった場合、データセットにするには短すぎるためスキップする
+            # if segment_end - segment_start < 1:
+            #     typer.echo(f'Transcript skipped. (Duration < 1 sec)')
+            #     continue
 
             # 出力先の音声ファイルのパス
             # 例: 0001_こんにちは.wav
