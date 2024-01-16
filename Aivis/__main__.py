@@ -310,6 +310,8 @@ def create_segments(
             output_audio_file = folder / f'{count:04d}_{transcript}.wav'
 
             # 一文ごとに切り出した (セグメント化した) 音声ファイルを出力
+            segment_start = segment_start - 0.25
+            segment_end = segment_end + 0.1
             real_output_audio_file = prepare.SliceAudioFile(voices_file, output_audio_file, segment_start, segment_end, trim_silence)
 
             typer.echo(f'File {real_output_audio_file} saved.')
